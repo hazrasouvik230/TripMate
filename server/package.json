@@ -1,0 +1,35 @@
+{
+  "name": "tripmate-ai-server",
+  "version": "1.0.0",
+  "description": "TripMate AI - Backend API Server",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "mcp": "tsx mcp/server.ts"
+  },
+  "keywords": [
+    "tripmate",
+    "ai",
+    "travel",
+    "mern"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^2.32.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.11.4",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14",
+    "tsx": "^4.23.15"
+  }
+}

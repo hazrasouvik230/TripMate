@@ -1,0 +1,188 @@
+@import "tailwindcss";
+
+/* Enable class-based dark mode (toggled by adding `.dark` to <html>). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Match native form controls, scrollbars, etc. to the active theme. */
+.dark {
+  color-scheme: dark;
+}
+
+/* Base page surface + text, themed. A smooth transition makes toggling
+   between light and dark feel intentional rather than jarring. */
+body {
+  background-color: #ffffff; /* white */
+  color: #0f172a; /* slate-900 */
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.dark body {
+  background-color: #020617; /* slate-950 */
+  color: #f1f5f9; /* slate-100 */
+}
+
+/* ------------------------------------------------------------------ */
+/*  Native date inputs                                                */
+/*  Make the field + calendar icon feel clickable and modern. The     */
+/*  `color-scheme` set above makes the browser's picker popup follow   */
+/*  the active theme automatically, including greying out dates that   */
+/*  fall outside the input's `min`/`max` range.                        */
+/* ------------------------------------------------------------------ */
+input[type="date"] {
+  cursor: pointer;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  padding: 4px;
+  margin-left: 4px;
+  border-radius: 6px;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background-color: rgba(99, 102, 241, 0.12); /* indigo-500 @ 12% */
+}
+
+/* Firefox exposes the clear/stepper buttons instead of the webkit
+   indicator — keep the pointer affordance consistent there too. */
+input[type="date"]::-moz-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Custom scrollbar                                                   */
+/*  A slim, themed scrollbar for scrollable panels (e.g. the AI        */
+/*  itinerary / assistant column). Falls back gracefully where the     */
+/*  pseudo-elements aren't supported.                                  */
+/* ------------------------------------------------------------------ */
+.custom-scrollbar {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(99, 102, 241, 0.5) transparent; /* thumb / track */
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(99, 102, 241, 0.4); /* indigo-500 @ 40% */
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(99, 102, 241, 0.7); /* indigo-500 @ 70% */
+}
+
+.dark .custom-scrollbar {
+  scrollbar-color: rgba(129, 140, 248, 0.5) transparent; /* indigo-400 */
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(129, 140, 248, 0.35); /* indigo-400 @ 35% */
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(129, 140, 248, 0.65); /* indigo-400 @ 65% */
+}
+
+/* Marching-ants flow for the "How It Works" connector path. The offset equals
+   the dasharray sum (6 + 12) so the loop is seamless. */
+@keyframes dashflow {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+/* Shared fade/slide-in used by popovers, toasts, and dialogs. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  AI assistant launcher                                              */
+/*  An animated "living" orb: a slowly shifting gradient, a gentle     */
+/*  breathing float, and a pulsing glow — so the button reads as an    */
+/*  AI assistant rather than a plain chat icon.                        */
+/* ------------------------------------------------------------------ */
+@keyframes aiGradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes aiFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes aiGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.45),
+      0 10px 25px -5px rgba(99, 102, 241, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(139, 92, 246, 0),
+      0 10px 30px -5px rgba(168, 85, 247, 0.6);
+  }
+}
+
+.ai-launcher {
+  background-image: linear-gradient(
+    120deg,
+    #6366f1,
+    /* indigo-500 */ #8b5cf6,
+    /* violet-500 */ #a855f7,
+    /* purple-500 */ #d946ef,
+    /* fuchsia-500 */ #8b5cf6,
+    #6366f1
+  );
+  background-size: 300% 300%;
+  animation: aiGradient 6s ease infinite, aiFloat 4s ease-in-out infinite,
+    aiGlow 3s ease-in-out infinite;
+}
+
+.ai-launcher:hover {
+  animation-play-state: paused, paused, paused;
+  filter: brightness(1.08);
+}
+
+/* Respect users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .ai-launcher {
+    animation: aiGradient 12s ease infinite;
+  }
+}
