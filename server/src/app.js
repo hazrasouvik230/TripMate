@@ -17,6 +17,15 @@ app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// --------------- Health Check ---------------
+// Lightweight liveness endpoints (used by Render's health check, uptime
+// pings, and bots hitting the root). Returning 200 here keeps these out of
+// the error logs instead of falling through to the 404 handler.
+const health = (_req, res) =>
+  res.status(200).json({ status: "ok", service: "tripmate-ai-server" });
+app.get("/", health);
+app.get("/health", health);
+
 // --------------- API Routes ---------------
 app.use("/api/v1", apiRoutes);
 

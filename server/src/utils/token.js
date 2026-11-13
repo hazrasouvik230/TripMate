@@ -14,22 +14,34 @@ export const generateToken = (userId) =>
 export const verifyToken = (token) =>
   jwt.verify(token, process.env.JWT_SECRET);
 
+const isProd = process.env.NODE_ENV === "production";
+
 /**
- * Write the JWT into an httpOnly cookie on the response.
+ * Shared cookie options.
  *
  * Security notes:
  *  • httpOnly  – JavaScript cannot read the cookie (XSS-safe)
  *  • secure    – cookie only sent over HTTPS in production
- *  • sameSite  – "lax" blocks most cross-site request forgery
+ *  • sameSite  – "none" in production so the cookie is sent on cross-site
+ *                requests (frontend on Vercel, backend on Render); "lax" in
+ *                development where frontend + backend share localhost.
+ *                Note: "none" REQUIRES secure: true.
  *  • path: "/" – cookie available to all routes
+ */
+const cookieOptions = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: isProd ? "none" : "lax",
+  path: "/",
+};
+
+/**
+ * Write the JWT into an httpOnly cookie on the response.
  */
 export const setTokenCookie = (res, token) => {
   res.cookie("token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    ...cookieOptions,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    path: "/",
   });
 };
 
@@ -38,11 +50,8 @@ export const setTokenCookie = (res, token) => {
  */
 export const clearTokenCookie = (res) => {
   res.cookie("token", "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    ...cookieOptions,
     maxAge: 0,
-    path: "/",
   });
 };
 
