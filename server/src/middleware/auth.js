@@ -2,11 +2,17 @@ import { verifyToken } from "../utils/token.js";
 import User from "../models/User.js";
 
 /**
- * Protect middleware — reads the JWT from the httpOnly cookie,
- * verifies it, loads the user, and attaches it to `req.user`.
+ * Protect middleware — reads the JWT from the `Authorization: Bearer`
+ * header (preferred for cross-domain clients, e.g. Vercel → Render) or,
+ * as a fallback, the httpOnly cookie (same-site / local dev). Verifies it,
+ * loads the user, and attaches it to `req.user`.
  */
 export const protect = async (req, res, next) => {
-  const token = req.cookies?.token;
+  const authHeader = req.headers.authorization || "";
+  const bearerToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : null;
+  const token = bearerToken || req.cookies?.token;
 
   if (!token) {
     return res

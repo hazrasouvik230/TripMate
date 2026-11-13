@@ -1,5 +1,16 @@
 import axios from "axios";
 
+const TOKEN_KEY = "tripmate_token";
+
+/** Read the stored JWT (null if not logged in). */
+export const getAuthToken = () => localStorage.getItem(TOKEN_KEY);
+
+/** Store the JWT (pass null/undefined to clear it, e.g. on logout). */
+export const setAuthToken = (token) => {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+};
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/api/v1",
   headers: {
@@ -8,9 +19,16 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Request interceptor
+// Request interceptor — attach the Bearer token so auth works cross-domain
+// (Vercel frontend → Render backend), where third-party cookies are blocked.
 api.interceptors.request.use(
-  (config) => config,
+  (config) => {
+    const token = getAuthToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
   (error) => Promise.reject(error)
 );
 

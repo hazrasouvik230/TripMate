@@ -1,4 +1,4 @@
-import api from "./api";
+import api, { getAuthToken } from "./api";
 
 /**
  * AI service — talks to the authenticated backend AI routes.
@@ -83,9 +83,13 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api/v1";
  * @param {AbortSignal} [opts.signal]
  */
 const postSse = async (path, body, { onEvent, signal } = {}) => {
+  const token = getAuthToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     credentials: "include",
     body: JSON.stringify(body),
     signal,

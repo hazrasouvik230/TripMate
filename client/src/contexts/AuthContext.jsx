@@ -5,7 +5,7 @@ import {
   useEffect,
   useCallback,
 } from "react";
-import api from "../services/api";
+import api, { getAuthToken, setAuthToken } from "../services/api";
 
 const AuthContext = createContext(null);
 
@@ -21,10 +21,17 @@ export const AuthProvider = ({ children }) => {
 
   /* ---- Restore session on mount ---- */
   const fetchUser = useCallback(async () => {
+    // No stored token → not logged in; skip the network round-trip.
+    if (!getAuthToken()) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
     try {
       const data = await api.get("/auth/me");
       setUser(data.user);
     } catch {
+      setAuthToken(null); // stale/invalid token → clear it
       setUser(null);
     } finally {
       setLoading(false);
@@ -38,12 +45,14 @@ export const AuthProvider = ({ children }) => {
   /* ---- Auth actions ---- */
   const register = async (formData) => {
     const data = await api.post("/auth/register", formData);
+    setAuthToken(data.token);
     setUser(data.user);
     return data;
   };
 
   const login = async (formData) => {
     const data = await api.post("/auth/login", formData);
+    setAuthToken(data.token);
     setUser(data.user);
     return data;
   };
@@ -52,6 +61,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await api.post("/auth/logout");
     } finally {
+      setAuthToken(null);
       setUser(null);
     }
   };

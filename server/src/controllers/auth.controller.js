@@ -34,6 +34,7 @@ export const register = async (req, res, next) => {
       success: true,
       message: "Registration successful",
       user,
+      token, // also returned for Authorization: Bearer (cross-domain clients)
     });
   } catch (error) {
     // Safety net: MongoDB duplicate-key error (race condition)
@@ -74,6 +75,7 @@ export const login = async (req, res, next) => {
       success: true,
       message: "Login successful",
       user, // toJSON strips passwordHash
+      token, // also returned for Authorization: Bearer (cross-domain clients)
     });
   } catch (error) {
     next(error);
