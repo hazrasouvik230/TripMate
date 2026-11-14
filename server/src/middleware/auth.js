@@ -39,3 +39,17 @@ export const protect = async (req, res, next) => {
   }
 };
 
+/**
+ * Authorisation middleware — gates a route to admins only. Must run AFTER
+ * `protect` so `req.user` is populated. Non-admins get a 403 (they're
+ * authenticated, just not permitted).
+ */
+export const requireAdmin = (req, res, next) => {
+  if (req.user?.role !== "admin") {
+    return res
+      .status(403)
+      .json({ success: false, message: "Admin access required" });
+  }
+  next();
+};
+

@@ -20,3 +20,11 @@ export const verifyItineraryPaymentSchema = z
     signature: z.string({ required_error: "signature is required" }).trim().min(1),
   })
   .strict();
+
+/* ---------- Mark a pending order as failed ---------- */
+export const markItineraryPaymentFailedSchema = z
+  .object({
+    orderId: z.string({ required_error: "orderId is required" }).trim().min(1),
+    paymentId: z.string().trim().optional(),
+  })
+  .strict();

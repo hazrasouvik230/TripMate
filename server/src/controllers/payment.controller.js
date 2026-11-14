@@ -213,3 +213,37 @@ export const verifyItineraryPayment = async (req, res, next) => {
     next(error);
   }
 };
+
+/* ------------------------------------------------------------------ */
+/*  POST  /api/v1/payments/itinerary/failed                           */
+/* ------------------------------------------------------------------ */
+/**
+ * Mark a pending order as failed. Called by the client when Razorpay reports a
+ * failed payment or the user abandons a started attempt, so the record doesn't
+ * stay stuck at `created`. Only a still-pending order the user owns is touched
+ * — a `paid` order is never regressed.
+ */
+export const markItineraryPaymentFailed = async (req, res, next) => {
+  try {
+    const { orderId, paymentId } = req.body;
+
+    const payment = await Payment.findOne({
+      orderId,
+      userId: req.user._id,
+    });
+    if (!payment) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    // Never regress a verified payment; only pending orders can fail.
+    if (payment.status === "created") {
+      payment.status = "failed";
+      if (paymentId) payment.paymentId = paymentId;
+      await payment.save();
+    }
+
+    res.status(200).json({ success: true, status: payment.status });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
+    "make-admin": "node src/scripts/makeAdmin.js",
     "mcp": "tsx mcp/server.ts"
   },
   "keywords": [

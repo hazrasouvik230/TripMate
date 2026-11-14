@@ -4,6 +4,7 @@ import { ToastProvider } from "./contexts/ToastContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import Layout from "./components/layout/Layout";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
+import AdminRoute from "./components/layout/AdminRoute";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -14,6 +15,7 @@ import TripEdit from "./pages/trips/TripEdit";
 import TripDetails from "./pages/trips/TripDetails";
 import MapPage from "./pages/trips/MapPage";
 import BudgetDashboard from "./pages/trips/BudgetDashboard";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 
 const App = () => {
   return (
@@ -75,6 +77,16 @@ const App = () => {
                 <ProtectedRoute>
                   <BudgetDashboard />
                 </ProtectedRoute>
+              }
+            />
+
+            {/* Admin only */}
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <AdminDashboard />
+                </AdminRoute>
               }
             />
 

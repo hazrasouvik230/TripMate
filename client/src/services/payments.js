@@ -20,6 +20,10 @@ export const createItineraryOrder = (tripId) =>
 export const verifyItineraryPayment = (payload) =>
   api.post(`/payments/itinerary/verify`, payload);
 
+/** Mark a pending order as failed (payment failed or abandoned). */
+export const markItineraryPaymentFailed = (payload) =>
+  api.post(`/payments/itinerary/failed`, payload);
+
 /* ---------- Razorpay checkout script loader ---------- */
 let scriptPromise = null;
 
@@ -107,6 +111,14 @@ export const unlockItineraryDays = async (tripId, { name, email } = {}) => {
 
     rzp.on("payment.failed", (response) => {
       settled = true;
+      // Tell the server so the order record moves from `created` → `failed`
+      // instead of staying stuck as a pending order. Fire-and-forget: the
+      // user-facing outcome is the rejection below regardless.
+      const meta = response?.error?.metadata || {};
+      markItineraryPaymentFailed({
+        orderId: meta.order_id || order.orderId,
+        ...(meta.payment_id ? { paymentId: meta.payment_id } : {}),
+      }).catch(() => {});
       reject(new Error(response?.error?.description || "Payment failed. Please try again."));
     });
 

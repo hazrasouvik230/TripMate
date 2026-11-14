@@ -3,6 +3,7 @@
  */
 
 const DATE_FMT = { year: "numeric", month: "short", day: "numeric" };
+const TIME_FMT = { hour: "2-digit", minute: "2-digit" };
 
 export const formatDate = (value) => {
   if (!value) return "—";
@@ -10,6 +11,15 @@ export const formatDate = (value) => {
   return Number.isNaN(d.getTime())
     ? "—"
     : d.toLocaleDateString(undefined, DATE_FMT);
+};
+
+/** Locale-aware time of day (e.g. "11:58 PM"). */
+export const formatTime = (value) => {
+  if (!value) return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleTimeString(undefined, TIME_FMT);
 };
 
 export const formatRange = (start, end) =>

@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import bcryptjs from "bcryptjs";
 
+export const USER_ROLES = ["user", "admin"];
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -24,6 +26,18 @@ const userSchema = new mongoose.Schema(
     travelPreferences: {
       type: [String],
       default: [],
+    },
+    // Access level. `admin` unlocks the admin dashboard (platform-wide
+    // transactions + analytics). Promoted out-of-band (DB / make-admin
+    // script), never self-assigned via register/login.
+    role: {
+      type: String,
+      enum: {
+        values: USER_ROLES,
+        message: "`{VALUE}` is not a valid role",
+      },
+      default: "user",
+      index: true,
     },
   },
   { timestamps: true }

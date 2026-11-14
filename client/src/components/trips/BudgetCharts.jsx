@@ -42,26 +42,40 @@ export const CategoryBars = ({ categories, currency }) => {
 };
 
 /* Vertical bars: amount by day. */
-export const DailyBars = ({ days, currency }) => {
+export const DailyBars = ({ days, currency, className = "" }) => {
   if (!days?.length) return <p className="text-sm text-slate-400">No dated expenses yet.</p>;
   const max = Math.max(1, ...days.map((d) => d.amount));
   const shortDate = (d) => (d === "unscheduled" ? "N/A" : d.slice(5)); // MM-DD
 
   return (
-    <div className="flex items-end gap-2 h-40 overflow-x-auto pb-1" aria-label="Spending by day">
-      {days.map((d) => (
-        <div key={d.date} className="flex flex-col items-center justify-end gap-1 min-w-[2.5rem] flex-1 h-full">
-          <span className="text-[11px] text-slate-500">
-            {formatMoney(d.amount, currency)?.replace(/\.00$/, "") || d.amount}
+    <div className={`overflow-x-auto pb-1 flex flex-col ${className}`} aria-label="Spending by day">
+      {/* Bars share one baseline (the bottom of this track). Grows to fill a
+          taller parent, but never shorter than a readable minimum. */}
+      <div className="flex items-end gap-2 flex-1 min-h-[10rem]">
+        {days.map((d) => (
+          <div key={d.date} className="flex flex-col items-center justify-end gap-1 min-w-[2.5rem] flex-1 h-full">
+            <span className="text-[11px] text-slate-500">
+              {formatMoney(d.amount, currency)?.replace(/\.00$/, "") || d.amount}
+            </span>
+            <div
+              className="w-full rounded-t-md transition-[height] duration-300"
+              style={{ height: `${Math.max(2, (d.amount / max) * 100)}%`, backgroundColor: BAR }}
+              title={`${shortDate(d.date)}: ${formatMoney(d.amount, currency) || d.amount}`}
+            />
+          </div>
+        ))}
+      </div>
+      {/* Date labels in a parallel row so they line up under each bar. */}
+      <div className="flex gap-2 mt-1">
+        {days.map((d) => (
+          <span
+            key={d.date}
+            className="text-[11px] text-slate-400 whitespace-nowrap text-center min-w-[2.5rem] flex-1"
+          >
+            {shortDate(d.date)}
           </span>
-          <div
-            className="w-full rounded-t-md transition-[height] duration-300"
-            style={{ height: `${Math.max(2, (d.amount / max) * 100)}%`, backgroundColor: BAR }}
-            title={`${shortDate(d.date)}: ${formatMoney(d.amount, currency) || d.amount}`}
-          />
-          <span className="text-[11px] text-slate-400 whitespace-nowrap">{shortDate(d.date)}</span>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 };
