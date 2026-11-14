@@ -4,6 +4,7 @@ import {
   aiTestStream,
   generateItinerary,
   generateItineraryStream,
+  extendItineraryStream,
   getLatestItinerary,
   updateItinerary,
   regenerateDay,
@@ -47,6 +48,11 @@ router.post(
   "/generate-itinerary/stream",
   validate(generateItinerarySchema),
   generateItineraryStream
+);
+router.post(
+  "/generate-itinerary/extend/stream",
+  validate(generateItinerarySchema),
+  extendItineraryStream
 );
 router.post("/search-knowledge", validate(searchKnowledgeSchema), searchKnowledge);
 router.post("/suggest-interests", validate(suggestInterestsSchema), suggestInterests);

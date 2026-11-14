@@ -438,6 +438,7 @@ const TripDetails = () => {
           <ItinerarySection
             tripId={tripId}
             onOpenAssistant={() => setAssistantOpen(true)}
+            onTripRefresh={load}
           />
         </div>
         {/* End right column */}

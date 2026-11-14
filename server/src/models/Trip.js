@@ -131,6 +131,15 @@ const tripSchema = new mongoose.Schema(
       default: "draft",
       index: true,
     },
+    // Extra AI-itinerary days unlocked beyond the free limit via paid
+    // Razorpay purchases. The itinerary generator covers
+    // `ITINERARY_MAX_DAYS + unlockedItineraryDays` days (capped at the trip
+    // length). Incremented server-side only, after a verified payment.
+    unlockedItineraryDays: {
+      type: Number,
+      min: [0, "Unlocked days cannot be negative"],
+      default: 0,
+    },
   },
   { timestamps: true }
 );

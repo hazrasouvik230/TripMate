@@ -23,6 +23,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { LoadingState, ErrorState } from "../../components/ui/States";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import DatePicker from "../../components/ui/DatePicker";
+import Select from "../../components/ui/Select";
 import { CategoryBars, DailyBars } from "../../components/trips/BudgetCharts";
 
 const CURRENCIES = ["", "USD", "EUR", "GBP", "JPY", "INR", "AUD", "CAD"];
@@ -193,17 +194,16 @@ const BudgetDashboard = () => {
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
           Display in
-          <select
+          <Select
+            className="w-44"
+            ariaLabel="Display currency"
             value={display}
-            onChange={(e) => onDisplayChange(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-300 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500"
-          >
-            {CURRENCIES.map((c) => (
-              <option key={c || "base"} value={c}>
-                {c || `${summary.currency} (trip)`}
-              </option>
-            ))}
-          </select>
+            onChange={onDisplayChange}
+            options={CURRENCIES.map((c) => ({
+              value: c,
+              label: c || `${summary.currency} (trip)`,
+            }))}
+          />
         </label>
       </div>
 
@@ -272,15 +272,13 @@ const BudgetDashboard = () => {
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-3 py-2 text-sm mb-3 dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-300">{formError}</div>
         )}
         <form onSubmit={submitItem} className="grid sm:grid-cols-12 gap-2">
-          <select
+          <Select
+            className="sm:col-span-3"
+            ariaLabel="Expense category"
             value={form.category}
-            onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-            className="sm:col-span-3 px-3 py-2.5 rounded-xl border border-slate-300 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500"
-          >
-            {BUDGET_CATEGORIES.map((c) => (
-              <option key={c.key} value={c.key}>{c.label}</option>
-            ))}
-          </select>
+            onChange={(v) => setForm((f) => ({ ...f, category: v }))}
+            options={BUDGET_CATEGORIES.map((c) => ({ value: c.key, label: c.label }))}
+          />
           <input
             value={form.label}
             onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}

@@ -6,17 +6,22 @@ import {
   RefreshCw,
   Map,
   MessageCircle,
+  Lock,
 } from "lucide-react";
 import {
   getItinerary,
   streamGenerateItinerary,
+  streamExtendItinerary,
   updateItinerary,
   regenerateItineraryDay,
 } from "../../services/ai";
+import { getItineraryQuote, unlockItineraryDays } from "../../services/payments";
 import ItineraryView from "./ItineraryView";
 import ActivityEditModal from "./ActivityEditModal";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { useToast } from "../../contexts/ToastContext";
+import { useAuth } from "../../contexts/AuthContext";
+import { formatMoney } from "../../utils/format";
 
 const SLOT_ORDER = ["morning", "afternoon", "evening"];
 const SLOT_LABELS = { morning: "Morning", afternoon: "Afternoon", evening: "Evening" };
@@ -36,7 +41,7 @@ const toEditableDays = (days) =>
     tips: d.tips || [],
   }));
 
-const ItinerarySection = ({ tripId, onOpenAssistant }) => {
+const ItinerarySection = ({ tripId, onOpenAssistant, onTripRefresh }) => {
   const [itinerary, setItinerary] = useState(null);
   const [loading, setLoading] = useState(true); // initial fetch
   const [generating, setGenerating] = useState(false); // full (re)generate
@@ -51,7 +56,12 @@ const ItinerarySection = ({ tripId, onOpenAssistant }) => {
   const [editTarget, setEditTarget] = useState(null); // { dayNumber, slotKey }
   const [confirmTarget, setConfirmTarget] = useState(null); // { dayNumber, slotKey }
 
+  // Unlock quote for trips longer than the free limit + in-flight payment.
+  const [quote, setQuote] = useState(null);
+  const [unlocking, setUnlocking] = useState(false);
+
   const { push } = useToast();
+  const { user } = useAuth();
 
   // Scrollable body + "stick to bottom" flag so generation auto-scrolls to
   // follow new content, unless the user has scrolled up to read something.
@@ -102,9 +112,20 @@ const ItinerarySection = ({ tripId, onOpenAssistant }) => {
     }
   }, [tripId]);
 
+  /* ---- Unlock quote (how many days are locked behind payment) ---- */
+  const loadQuote = useCallback(async () => {
+    try {
+      const data = await getItineraryQuote(tripId);
+      setQuote(data.quote);
+    } catch {
+      setQuote(null); // best-effort; the unlock prompt just won't show
+    }
+  }, [tripId]);
+
   useEffect(() => {
     loadExisting();
-  }, [loadExisting]);
+    loadQuote();
+  }, [loadExisting, loadQuote]);
 
   /* ---- Full (re)generate (streamed day-by-day) ---- */
   const handleGenerate = async () => {
@@ -149,6 +170,80 @@ const ItinerarySection = ({ tripId, onOpenAssistant }) => {
     } finally {
       setGenerating(false);
       setStream(null);
+    }
+  };
+
+  /* ---- Extend the plan with unlocked days (keeps days 1..N, adds the rest) ---- */
+  const handleGenerateRemaining = async () => {
+    if (!itinerary || generating || stream || busy) return;
+    const existing = itinerary.days;
+    stickRef.current = true;
+    setError("");
+    // Seed the live preview with the already-planned days so they stay put and
+    // only the new days stream in below them (no regeneration from day 1).
+    setStream({
+      currency: itinerary.currency,
+      numDays: quote?.coveredDays || existing.length,
+      days: existing.slice(),
+      completed: existing.length,
+    });
+    try {
+      await streamExtendItinerary(tripId, {
+        onMeta: (meta) => {
+          setStream((s) => ({
+            ...(s ?? { days: existing.slice(), completed: existing.length }),
+            numDays: meta.numDays,
+            currency: meta.currency || s?.currency,
+          }));
+        },
+        onDay: (day, index, complete) => {
+          setStream((s) => {
+            const base = s ?? { days: existing.slice(), completed: existing.length };
+            const days = base.days.slice();
+            days[index] = day; // absolute index — appends after existing days
+            const completed = complete
+              ? Math.max(base.completed ?? 0, index + 1)
+              : base.completed ?? 0;
+            return { ...base, days, completed };
+          });
+        },
+        onDone: (saved) => {
+          setItinerary(saved);
+          setStream(null);
+        },
+      });
+      push("Remaining days generated");
+      await loadQuote();
+    } catch (err) {
+      setError(err.message || "Failed to generate the remaining days");
+      push(err.message || "Failed to generate the remaining days", "error");
+    } finally {
+      setStream(null);
+    }
+  };
+
+  /* ---- Unlock extra days (Razorpay). Generation stays a separate step: ----
+     once paid, a "Generate for remaining days" button appears for the user to
+     click when they're ready. */
+  const handleUnlock = async () => {
+    if (unlocking || !quote?.lockedDays) return;
+    setUnlocking(true);
+    try {
+      const result = await unlockItineraryDays(tripId, {
+        name: user?.name,
+        email: user?.email,
+      });
+      push(result?.message || "Extra days unlocked — you can generate them now");
+      // Refresh the owning trip (its unlocked-day count changed) and our quote
+      // so the prompt flips from "pay" to "generate".
+      await onTripRefresh?.();
+      await loadQuote();
+    } catch (err) {
+      const msg = err?.message || "Payment could not be completed";
+      // A user closing the Razorpay popup isn't an error worth shouting about.
+      if (msg !== "Payment cancelled") push(msg, "error");
+    } finally {
+      setUnlocking(false);
     }
   };
 
@@ -245,6 +340,13 @@ const ItinerarySection = ({ tripId, onOpenAssistant }) => {
   const canRegenerate =
     !!itinerary && !generating && !stream && !busy && regeneratingDay === null;
 
+  // Days that are unlocked (free + paid) but not yet in the generated plan.
+  // After a successful payment this goes positive, surfacing the "Generate for
+  // remaining days" button so the user chooses when to extend the plan.
+  const generatedDays = itinerary?.days?.length || 0;
+  const pendingGenerateDays =
+    quote ? Math.max(0, quote.coveredDays - generatedDays) : 0;
+
   return (
     <div className="flex flex-col h-full bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden dark:bg-slate-900 dark:border-slate-800">
       {/* Fixed header */}
@@ -300,18 +402,103 @@ const ItinerarySection = ({ tripId, onOpenAssistant }) => {
 
       {/* Itinerary (editable) */}
       {!generating && !stream && !loading && itinerary && (
-        <ItineraryView
-          itinerary={itinerary}
-          editable
-          busy={busy}
-          regeneratingDay={regeneratingDay}
-          handlers={{
-            onRegenerateDay: handleRegenerateDay,
-            onEditActivity: (dayNumber, slotKey) => setEditTarget({ dayNumber, slotKey }),
-            onMoveActivity: handleMoveActivity,
-            onDeleteActivity: (dayNumber, slotKey) => setConfirmTarget({ dayNumber, slotKey }),
-          }}
-        />
+        <>
+          <ItineraryView
+            itinerary={itinerary}
+            editable
+            busy={busy}
+            regeneratingDay={regeneratingDay}
+            handlers={{
+              onRegenerateDay: handleRegenerateDay,
+              onEditActivity: (dayNumber, slotKey) => setEditTarget({ dayNumber, slotKey }),
+              onMoveActivity: handleMoveActivity,
+              onDeleteActivity: (dayNumber, slotKey) => setConfirmTarget({ dayNumber, slotKey }),
+            }}
+          />
+
+          {/* Below the plan: either a "pay to unlock" prompt (days still locked)
+              or — once paid — a "generate for remaining days" button. */}
+          {(pendingGenerateDays > 0 || quote?.lockedDays > 0) && (
+            <div className="mt-5 flex flex-col gap-3 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-xl px-4 py-4 text-sm dark:bg-indigo-500/10 dark:border-indigo-500/30 dark:text-indigo-200">
+              {pendingGenerateDays > 0 ? (
+                /* ---- Paid: days are unlocked, ready to generate ---- */
+                <>
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="w-5 h-5 shrink-0 mt-0.5 text-indigo-600 dark:text-indigo-400" />
+                    <p className="font-semibold">
+                      You've unlocked {pendingGenerateDays} more day
+                      {pendingGenerateDays === 1 ? "" : "s"}. Generate the plan to
+                      cover all {quote.coveredDays} of {quote.totalDays} days.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGenerateRemaining}
+                    disabled={!canRegenerate}
+                    className="self-start inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow-sm transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Sparkles className="w-4 h-4" /> Generate for remaining days
+                  </button>
+                </>
+              ) : (
+                /* ---- Still locked: pay to unlock the remaining days ---- */
+                <>
+                  <div className="flex items-start gap-3">
+                    <Lock className="w-5 h-5 shrink-0 mt-0.5 text-indigo-600 dark:text-indigo-400" />
+                    <div>
+                      <p className="font-semibold">
+                        This plan covers the first {quote.coveredDays} of{" "}
+                        {quote.totalDays} days.
+                      </p>
+                      <p className="mt-0.5">
+                        Let the AI plan the remaining {quote.lockedDays} day
+                        {quote.lockedDays === 1 ? "" : "s"} for{" "}
+                        {formatMoney(quote.pricePerDay, quote.currency) ||
+                          `${quote.pricePerDay} ${quote.currency}`}{" "}
+                        per day
+                        {quote.amount > 0 && (
+                          <>
+                            {" "}
+                            (total{" "}
+                            <span className="font-semibold">
+                              {formatMoney(quote.amount, quote.currency) ||
+                                `${quote.amount} ${quote.currency}`}
+                            </span>
+                            )
+                          </>
+                        )}
+                        .
+                      </p>
+                    </div>
+                  </div>
+                  {quote.paymentConfigured ? (
+                    <button
+                      type="button"
+                      onClick={handleUnlock}
+                      disabled={unlocking}
+                      className="self-start inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow-sm transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {unlocking ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" /> Processing
+                          payment…
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-4 h-4" /> Pay to unlock remaining days
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <p className="text-xs text-indigo-700/80 dark:text-indigo-300/80">
+                      Paid unlock is currently unavailable.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* Empty */}

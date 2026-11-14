@@ -229,5 +229,48 @@ export const streamGenerateItinerary = async (
   return itinerary;
 };
 
+/**
+ * Extend the latest itinerary with newly-unlocked days — the existing days are
+ * kept as-is and only the remaining days are generated (and streamed). The
+ * `index` in onDay is the absolute day index (0-based), so day 8 arrives at
+ * index 7, letting the caller append without touching earlier days.
+ *
+ * @param {string} tripId
+ * @param {object} handlers
+ * @param {(meta:{currency, numDays, fromDay})=>void} [handlers.onMeta]
+ * @param {(day:object, index:number, complete:boolean)=>void} [handlers.onDay]
+ * @param {(itinerary:object, meta:object)=>void} [handlers.onDone]
+ * @param {AbortSignal} [handlers.signal]
+ * @returns {Promise<object>} the final saved (combined) itinerary
+ */
+export const streamExtendItinerary = async (
+  tripId,
+  { onMeta, onDay, onDone, signal } = {}
+) => {
+  let itinerary = null;
+
+  await postSse("/ai/generate-itinerary/extend/stream", { tripId }, {
+    signal,
+    onEvent: (payload) => {
+      if (payload.type === "meta") {
+        onMeta?.({
+          currency: payload.currency,
+          numDays: payload.numDays,
+          fromDay: payload.fromDay,
+        });
+      } else if (payload.type === "day") {
+        onDay?.(payload.day, payload.index, payload.complete);
+      } else if (payload.type === "done") {
+        itinerary = payload.itinerary;
+        onDone?.(payload.itinerary, payload.meta);
+      } else if (payload.type === "error") {
+        throw new Error(payload.message || "Failed to generate the remaining days.");
+      }
+    },
+  });
+
+  return itinerary;
+};
+
 /** Load the saved chat history for a trip. */
 export const getChatHistory = (tripId) => api.get(`/ai/chat/${tripId}`);

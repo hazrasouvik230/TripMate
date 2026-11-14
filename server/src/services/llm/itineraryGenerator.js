@@ -147,16 +147,24 @@ export const buildBudgetAdvisory = (trip, estimatedTotalCost) => {
 };
 
 /* ---------- Prompt ---------- */
-const buildPrompt = (trip, numDays, instructions = "") => {
+const buildPrompt = (trip, numDays, totalTripDays, instructions = "") => {
   const start = atUtcMidnight(trip.startDate).toISOString().slice(0, 10);
   const end = atUtcMidnight(trip.endDate).toISOString().slice(0, 10);
   const interests = trip.interests?.length ? trip.interests.join(", ") : "general sightseeing";
   const totalBudget = partyTotalBudget(trip);
-  const perDayBudget = totalBudget ? round2(totalBudget / numDays) : null;
+  // This plan may cover only the FIRST `numDays` of a longer trip (the rest are
+  // unlocked/paid separately). Per-day budget is always based on the full trip
+  // length so partial plans don't try to spend the whole budget in a few days.
+  const isPartial = numDays < totalTripDays;
+  const perDayBudget = totalBudget ? round2(totalBudget / totalTripDays) : null;
+  const segmentBudget = perDayBudget ? round2(perDayBudget * numDays) : null;
   const guidance = (instructions || "").trim();
 
   return [
-    `Plan a ${numDays}-day travel itinerary.`,
+    isPartial
+      ? `Plan ONLY the first ${numDays} days of a longer ${totalTripDays}-day trip ` +
+        `(you are NOT planning the whole trip right now).`
+      : `Plan a ${numDays}-day travel itinerary.`,
     ``,
     `Destination: ${trip.destination}`,
     trip.origin ? `Travelling from: ${trip.origin}` : null,
@@ -196,10 +204,14 @@ const buildPrompt = (trip, numDays, instructions = "") => {
     `guesthouse, hostel, resort, homestay) and an approximate per-night price for`,
     `the whole party in ${trip.currency}. Keep the options aligned with the`,
     `travel style and budget. It's fine to reuse the same set of hotels across`,
-    `consecutive nights in the same city. Leave accommodation EMPTY only on a`,
-    `final day when the traveller departs and does not stay overnight. Prefer`,
-    `real, named properties; if unsure one exists, suggest a specific area and`,
-    `type rather than inventing a fake hotel name.`,
+    `consecutive nights in the same city.`,
+    isPartial
+      ? `Because this plan covers only the first ${numDays} of ${totalTripDays} days, the ` +
+        `traveller stays overnight on EVERY day in this plan (including day ${numDays}); ` +
+        `fill accommodation for all of them — none of these days is a departure day.`
+      : `Leave accommodation EMPTY only on a final day when the traveller departs and does not stay overnight.`,
+    `Prefer real, named properties; if unsure one exists, suggest a specific area`,
+    `and type rather than inventing a fake hotel name.`,
     trip.origin
       ? [
           ``,
@@ -214,8 +226,13 @@ const buildPrompt = (trip, numDays, instructions = "") => {
           `Express") — so the traveller knows precisely what to board. Set Day`,
           `1's morning activity to this travel/arrival (and check-in) rather than`,
           `local sightseeing. Only schedule ${trip.destination} activities for the`,
-          `time realistically left after arrival. On the final day, include the`,
-          `return journey back to ${trip.origin} in the evening (or last) slot.`,
+          `time realistically left after arrival.`,
+          isPartial
+            ? `IMPORTANT: this plan covers only the first ${numDays} of ${totalTripDays} days, ` +
+              `so do NOT include any return or departure journey — the trip continues after ` +
+              `day ${numDays}. Do NOT treat day ${numDays} as the last day; the traveller ` +
+              `stays overnight and keeps travelling the next day.`
+            : `On the final day, include the return journey back to ${trip.origin} in the evening (or last) slot.`,
           `Reflect these trips in each day's transportation field and costs too.`,
         ].join("\n")
       : null,
@@ -228,17 +245,21 @@ const buildPrompt = (trip, numDays, instructions = "") => {
     totalBudget
       ? [
           ``,
-          `BUDGET (primary goal): The party's budget is ${totalBudget} ${trip.currency}`,
-          `(roughly ${perDayBudget} ${trip.currency} per day). Keep the plan's TOTAL`,
-          `cost UNDER this budget, but make good use of it — aim to land CLOSE TO`,
-          `(just under) the budget rather than far below, so the trip is as rich as`,
-          `the budget allows. NEVER exceed the budget. Use realistic, current-market`,
-          `prices; do NOT fabricate unrealistically low costs to force a fit, and do`,
-          `NOT pad costs to reach the budget. ONLY if the destination genuinely`,
-          `cannot be visited realistically for this many travellers/days even with`,
-          `the cheapest realistic options should the total exceed the budget — in`,
-          `that case use honest prices (the app will then show the user a recommended`,
-          `budget).`,
+          isPartial
+            ? `BUDGET (primary goal): The whole-party budget for the full ${totalTripDays}-day ` +
+              `trip is ${totalBudget} ${trip.currency} (roughly ${perDayBudget} ${trip.currency} per ` +
+              `day). Since this plan covers only ${numDays} day(s), keep THESE days' TOTAL cost ` +
+              `UNDER about ${segmentBudget} ${trip.currency} (${perDayBudget} ${trip.currency}/day) — ` +
+              `make good use of it without exceeding that share.`
+            : `BUDGET (primary goal): The party's budget is ${totalBudget} ${trip.currency} ` +
+              `(roughly ${perDayBudget} ${trip.currency} per day). Keep the plan's TOTAL cost UNDER ` +
+              `this budget, but make good use of it — aim to land CLOSE TO (just under) the budget ` +
+              `rather than far below, so the trip is as rich as the budget allows.`,
+          `NEVER exceed the stated cap. Use realistic, current-market prices; do NOT fabricate`,
+          `unrealistically low costs to force a fit, and do NOT pad costs to reach the budget.`,
+          `ONLY if the destination genuinely cannot be visited realistically for this many`,
+          `travellers/days even with the cheapest realistic options should the total exceed the`,
+          `budget — in that case use honest prices (the app will then show a recommended budget).`,
         ].join("\n")
       : null,
     guidance
@@ -626,6 +647,33 @@ const shapeDay = (d, index, trip) => ({
   estimatedDayCost: sumDayCost(d),
 });
 
+// Shape a PARTIAL day (fields may still be streaming in) for a live preview.
+// Unlike shapeDay it tolerates missing slots so the UI can fill text in live.
+const shapePartialDay = (d, dayNumber, date) => ({
+  dayNumber,
+  date,
+  summary: d.summary || "",
+  morning: d.morning || null,
+  afternoon: d.afternoon || null,
+  evening: d.evening || null,
+  food: Array.isArray(d.food) ? d.food : [],
+  transportation: d.transportation || "",
+  accommodation: Array.isArray(d.accommodation) ? d.accommodation : [],
+  tips: Array.isArray(d.tips) ? d.tips : [],
+  estimatedDayCost: computeDayCost(d),
+});
+
+/**
+ * The "this plan covers the first N of M days" note shown when a plan doesn't
+ * yet span the whole trip. Empty string once the whole trip is covered.
+ */
+export const buildCoverageNote = (coveredDays, totalTripDays) =>
+  coveredDays < totalTripDays
+    ? `This plan covers the first ${coveredDays} of ${totalTripDays} days of your trip. ` +
+      `Unlock the remaining ${totalTripDays - coveredDays} day` +
+      `${totalTripDays - coveredDays === 1 ? "" : "s"} to let the AI plan them too.`
+    : "";
+
 // Validate the raw LLM output and assemble the final persistable object.
 // Totals and dates are computed/assigned in JS — the model's arithmetic and
 // calendar are never trusted.
@@ -665,10 +713,7 @@ const finalizeItinerary = (trip, numDays, totalTripDays, { data, model, usage, e
     });
   }
 
-  const notes =
-    numDays < totalTripDays
-      ? `This plan covers the first ${numDays} of ${totalTripDays} days of your trip.`
-      : "";
+  const notes = buildCoverageNote(numDays, totalTripDays);
 
   return {
     days,
@@ -694,7 +739,11 @@ const resolveNumDays = (trip) => {
       code: "invalid_trip_dates",
     });
   }
-  return { totalTripDays, numDays: Math.min(totalTripDays, llmConfig.itinerary.maxDays) };
+  // The first `maxDays` are free; any extra days the user has paid to unlock
+  // extend the covered window (still capped at the trip's length).
+  const unlocked = Math.max(0, Math.floor(trip.unlockedItineraryDays || 0));
+  const allowedDays = llmConfig.itinerary.maxDays + unlocked;
+  return { totalTripDays, numDays: Math.min(totalTripDays, allowedDays) };
 };
 
 /**
@@ -712,7 +761,8 @@ export const generateItineraryForTrip = async (trip, { instructions } = {}) => {
   const { data, model, usage } = await generateStructured({
     system: ITINERARY_SYSTEM_PROMPT,
     userMessage:
-      buildPrompt(trip, numDays, instructions) + buildEnrichmentBlock(enrichment),
+      buildPrompt(trip, numDays, totalTripDays, instructions) +
+      buildEnrichmentBlock(enrichment),
     schema: buildLlmSchema(),
   });
 
@@ -760,7 +810,8 @@ export const generateItineraryForTripStream = async (
   const { data, model, usage } = await generateStructuredStream({
     system: ITINERARY_SYSTEM_PROMPT,
     userMessage:
-      buildPrompt(trip, numDays, instructions) + buildEnrichmentBlock(enrichment),
+      buildPrompt(trip, numDays, totalTripDays, instructions) +
+      buildEnrichmentBlock(enrichment),
     schema: buildLlmSchema(),
     onDelta: (_delta, accumulated) => {
       if (!onDay) return;
@@ -783,6 +834,74 @@ export const generateItineraryForTripStream = async (
   });
 
   return finalizeItinerary(trip, numDays, totalTripDays, { data, model, usage, enrichment });
+};
+
+/**
+ * Extend an existing plan: generate ONLY the days after the ones already
+ * planned, up to the currently-unlocked coverage, WITHOUT regenerating the
+ * existing days. Each new day is produced on its own (reusing the single-day
+ * generator, which correctly treats day 1 as the arrival day and the trip's
+ * real last day as the departure day), streamed as it completes.
+ *
+ * @param {object} trip
+ * @param {Array} existingDays - already-generated days (plain objects)
+ * @param {object} handlers
+ * @param {(meta:{currency,numDays,fromDay})=>void} [handlers.onMeta]
+ * @param {(day:object, index:number, complete:boolean)=>void} [handlers.onDay]
+ * @returns {Promise<{newDays:Array, numDays:number, totalTripDays:number}>}
+ */
+export const generateRemainingDaysForTripStream = async (
+  trip,
+  existingDays = [],
+  { onMeta, onDay } = {}
+) => {
+  const { totalTripDays, numDays } = resolveNumDays(trip);
+  const fromDay = existingDays.length + 1;
+
+  if (fromDay > numDays) {
+    throw new LlmError("There are no additional unlocked days to generate.", {
+      statusCode: 400,
+      code: "no_remaining_days",
+    });
+  }
+
+  onMeta?.({ currency: trip.currency || "INR", numDays, fromDay });
+
+  // Avoid repeating attractions already used on the existing days.
+  const avoidNames = existingDays
+    .flatMap((d) => [d.morning?.name, d.afternoon?.name, d.evening?.name])
+    .filter(Boolean);
+
+  const newDays = [];
+  for (let dayNumber = fromDay; dayNumber <= numDays; dayNumber++) {
+    const date = atUtcMidnight(addDays(trip.startDate, dayNumber - 1));
+    const index = dayNumber - 1; // absolute day index for the client
+
+    // Stream the day as the model writes it, so its text fills in live
+    // (word by word) instead of popping in fully-formed.
+    const fresh = await generateDayForTripStream(trip, dayNumber, date, avoidNames, {
+      onPartial: (partial) => {
+        onDay?.(shapePartialDay(partial, dayNumber, date), index, false);
+      },
+    });
+
+    const shaped = {
+      dayNumber,
+      date,
+      ...fresh,
+      estimatedDayCost: computeDayCost(fresh),
+    };
+    newDays.push(shaped);
+
+    // Keep later days from repeating what the new days just used.
+    [fresh.morning?.name, fresh.afternoon?.name, fresh.evening?.name]
+      .filter(Boolean)
+      .forEach((n) => avoidNames.push(n));
+
+    onDay?.(shaped, index, true);
+  }
+
+  return { newDays, numDays, totalTripDays };
 };
 
 /* ---------- Single-day regeneration ---------- */
@@ -867,6 +986,61 @@ export const generateDayForTrip = async (trip, dayNumber, date, avoidNames = [])
     userMessage: buildDayPrompt(trip, dayNumber, isoDate, avoidNames),
     schema: dayItemJson,
     maxTokens: Math.min(2048, llmConfig.itinerary.maxOutputTokens),
+  });
+
+  const parsed = llmDaySchema.safeParse(data);
+  if (!parsed.success) {
+    throw new LlmError("The AI returned a day that failed validation.", {
+      statusCode: 502,
+      code: "day_validation_failed",
+    });
+  }
+
+  const d = parsed.data;
+  return {
+    summary: d.summary,
+    morning: d.morning,
+    afternoon: d.afternoon,
+    evening: d.evening,
+    food: d.food,
+    transportation: d.transportation,
+    accommodation: Array.isArray(d.accommodation) ? d.accommodation : [],
+    tips: d.tips,
+  };
+};
+
+/**
+ * Streaming variant of generateDayForTrip: emits the day's JSON as the model
+ * writes it (via `onPartial`) so the UI can fill text in live, then returns
+ * the fully-validated day. Used by the extend-plan flow.
+ */
+const generateDayForTripStream = async (
+  trip,
+  dayNumber,
+  date,
+  avoidNames = [],
+  { onPartial } = {}
+) => {
+  const isoDate = atUtcMidnight(date).toISOString().slice(0, 10);
+
+  const { data } = await generateStructuredStream({
+    system:
+      "You are TripMate AI, an expert travel planner producing one realistic " +
+      "day of a trip as structured JSON. Prices are rough estimates.",
+    userMessage: buildDayPrompt(trip, dayNumber, isoDate, avoidNames),
+    schema: dayItemJson,
+    maxTokens: Math.min(2048, llmConfig.itinerary.maxOutputTokens),
+    onDelta: (_delta, accumulated) => {
+      if (!onPartial) return;
+      const { value, usable } = parsePartialJson(accumulated);
+      if (usable && value && typeof value === "object") {
+        try {
+          onPartial(value);
+        } catch {
+          /* ignore a malformed preview frame; the final result is validated */
+        }
+      }
+    },
   });
 
   const parsed = llmDaySchema.safeParse(data);

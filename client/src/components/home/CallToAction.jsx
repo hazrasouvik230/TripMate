@@ -1,6 +1,7 @@
 import { ArrowRight, Sparkles } from "lucide-react";
 import Button from "../ui/Button";
 import SectionHeading from "../ui/SectionHeading";
+import { useAuth } from "../../contexts/AuthContext";
 
 const CTA_IMAGE =
   "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80";
@@ -10,6 +11,7 @@ const CTA_IMAGE =
  * Phase 2: The "Get Started" button will navigate to the sign-up / trip planner flow.
  */
 const CallToAction = () => {
+  const { user } = useAuth();
   return (
     <section className="relative py-20 sm:py-28 overflow-hidden bg-indigo-600">
       {/* Background pattern */}
@@ -43,15 +45,15 @@ const CallToAction = () => {
               first itinerary in under a minute.
             </p>
 
-            {/* Phase 2: Authentication / trip planner */}
+            {/* Logged-in users go to their trips instead of sign-up. */}
             <div className="mt-8 flex flex-wrap justify-center lg:justify-start gap-4">
               <Button
                 variant="primary"
                 size="lg"
-                to="/register"
+                to={user ? "/trips" : "/register"}
                 className="!bg-white !text-indigo-600 hover:!bg-indigo-50 !shadow-lg !shadow-indigo-900/20"
               >
-                Get Started — It's Free
+                {user ? "Go to My Trips" : "Get Started — It's Free"}
                 <ArrowRight className="w-5 h-5" />
               </Button>
             </div>

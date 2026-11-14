@@ -2,9 +2,11 @@ import { generateResponse, generateResponseStream } from "../services/llm/llmSer
 import {
   generateItineraryForTrip,
   generateItineraryForTripStream,
+  generateRemainingDaysForTripStream,
   generateDayForTrip,
   recomputeTotals,
   buildBudgetAdvisory,
+  buildCoverageNote,
 } from "../services/llm/itineraryGenerator.js";
 import { searchKnowledge as runVectorSearch } from "../services/search/vectorSearchService.js";
 import { suggestInterests as runSuggestInterests } from "../services/llm/interestSuggester.js";
@@ -289,6 +291,113 @@ export const generateItineraryStream = async (req, res, next) => {
       send({
         type: "error",
         message: error?.message || "Failed to generate itinerary. Please try again.",
+      });
+    }
+    res.end();
+  }
+};
+
+/* ------------------------------------------------------------------ */
+/*  POST  /api/v1/ai/generate-itinerary/extend/stream                 */
+/* ------------------------------------------------------------------ */
+/**
+ * Extend the latest itinerary with the days that have been unlocked but not
+ * yet planned, WITHOUT regenerating the existing days. Only the new days are
+ * produced (streamed as they complete); the existing days are kept as-is and
+ * the combined plan is saved as a new version.
+ *
+ * Event protocol mirrors generateItineraryStream:
+ *   {type:"meta", currency, numDays, fromDay}  - once, before any new day
+ *   {type:"day",  index, day, complete}        - a new day (absolute index)
+ *   {type:"done", itinerary, meta}             - the saved, combined result
+ *   {type:"error", message}                    - failure (pre- or mid-stream)
+ */
+export const extendItineraryStream = async (req, res, next) => {
+  if (!isLlmConfigured()) {
+    return res.status(503).json({
+      success: false,
+      message: "AI provider is not configured. Set GEMINI_API_KEY on the server.",
+    });
+  }
+
+  const { tripId } = req.body;
+
+  const trip = await Trip.findOne({ _id: tripId, userId: req.user._id });
+  if (!trip) {
+    return res.status(404).json({ success: false, message: "Trip not found" });
+  }
+
+  const latest = await Itinerary.findOne({ tripId: trip._id, userId: req.user._id })
+    .sort({ version: -1 });
+  if (!latest) {
+    return res.status(404).json({
+      success: false,
+      message: "Generate an itinerary first, then extend it with the remaining days.",
+    });
+  }
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+
+  const send = (payload) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
+
+  let aborted = false;
+  req.on("close", () => {
+    aborted = true;
+  });
+
+  try {
+    // Snapshot the existing days as plain objects so they're kept verbatim.
+    const existingDays = latest.days.map((d) =>
+      typeof d.toObject === "function" ? d.toObject() : d
+    );
+
+    const { newDays, totalTripDays } = await generateRemainingDaysForTripStream(
+      trip,
+      existingDays,
+      {
+        onMeta: (meta) => {
+          if (!aborted) send({ type: "meta", ...meta });
+        },
+        onDay: (day, index, complete) => {
+          if (!aborted) send({ type: "day", index, day, complete });
+        },
+      }
+    );
+
+    // Combine, recompute totals in JS, and persist as a new version.
+    const combined = [...existingDays, ...newDays];
+    const estimatedTotalCost = recomputeTotals(combined);
+    const version = (latest.version || 0) + 1;
+
+    const itinerary = await Itinerary.create({
+      tripId: trip._id,
+      userId: req.user._id,
+      version,
+      days: combined,
+      estimatedTotalCost,
+      currency: latest.currency || trip.currency || "INR",
+      model: latest.model || "",
+      disclaimer: latest.disclaimer || "",
+      notes: buildCoverageNote(combined.length, totalTripDays),
+      budgetAdvisory: buildBudgetAdvisory(trip, estimatedTotalCost),
+      enrichment: latest.enrichment || {},
+    });
+
+    if (!aborted) {
+      send({ type: "done", itinerary, meta: { model: latest.model } });
+    }
+    res.end();
+  } catch (error) {
+    if (!aborted) {
+      send({
+        type: "error",
+        message: error?.message || "Failed to generate the remaining days. Please try again.",
       });
     }
     res.end();

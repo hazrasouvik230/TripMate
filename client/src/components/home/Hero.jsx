@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ArrowRight, MapPin, Calendar, Sparkles } from "lucide-react";
 import Button from "../ui/Button";
+import { useAuth } from "../../contexts/AuthContext";
 
 // Varied scenery that cross-fades behind the hero. Beach, mountains, a
 // waterfall, forested hills and an alpine lake.
@@ -22,6 +23,7 @@ const STATS = [
 
 const Hero = () => {
   const [index, setIndex] = useState(0);
+  const { user } = useAuth();
 
   // Advance the slideshow on a timer.
   useEffect(() => {
@@ -86,9 +88,9 @@ const Hero = () => {
             ))}
           </div>
 
-          {/* CTAs — Phase 2: "Start Planning" will navigate to the trip planner */}
+          {/* CTAs — logged-in users jump straight to their trips. */}
           <div className="mt-10 flex flex-wrap gap-4">
-            <Button variant="primary" size="lg" to="/plan">
+            <Button variant="primary" size="lg" to={user ? "/trips" : "/plan"}>
               Start Planning <ArrowRight className="w-5 h-5" />
             </Button>
             <Button variant="secondary" size="lg" href="#how-it-works">

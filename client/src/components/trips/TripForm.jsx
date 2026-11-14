@@ -24,6 +24,7 @@ const TRIP_CURRENCY = "INR";
 import { toDateInput } from "../../utils/format";
 import { suggestInterests } from "../../services/ai";
 import DatePicker from "../ui/DatePicker";
+import Select from "../ui/Select";
 
 /* ------------------------------------------------------------------ */
 /*  Step definitions                                                  */
@@ -703,18 +704,13 @@ const TripForm = ({
             )}
 
             <Field label="Status" htmlFor="status" error={errors.status}>
-              <select
+              <Select
                 id="status"
                 value={form.status}
-                onChange={(e) => update("status", e.target.value)}
-                className={inputClass(errors.status)}
-              >
-                {TRIP_STATUSES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => update("status", v)}
+                options={TRIP_STATUSES}
+                error={errors.status}
+              />
             </Field>
           </div>
         )}
@@ -757,32 +753,20 @@ const TripForm = ({
 
             <div className="grid sm:grid-cols-2 gap-5">
               <Field label="Travel style" htmlFor="travelStyle">
-                <select
+                <Select
                   id="travelStyle"
                   value={form.travelStyle}
-                  onChange={(e) => update("travelStyle", e.target.value)}
-                  className={inputClass()}
-                >
-                  {TRAVEL_STYLES.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => update("travelStyle", v)}
+                  options={TRAVEL_STYLES}
+                />
               </Field>
               <Field label="Preferred pace" htmlFor="travelPace">
-                <select
+                <Select
                   id="travelPace"
                   value={form.travelPace}
-                  onChange={(e) => update("travelPace", e.target.value)}
-                  className={inputClass()}
-                >
-                  {TRAVEL_PACES.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => update("travelPace", v)}
+                  options={TRAVEL_PACES}
+                />
               </Field>
             </div>
           </div>
